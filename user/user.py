@@ -1,8 +1,7 @@
 from flask import Flask, render_template, request, jsonify, make_response, g
 import json
 from werkzeug.exceptions import NotFound
-from utils.jwt import token_required, create_jwt
-
+from jwt import token_required, create_jwt
 app = Flask(__name__)
 
 PORT = 3203
