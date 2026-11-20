@@ -5,8 +5,8 @@ from graphql import GraphQLError
 
 
 BASE_DIR = Path(__file__).resolve().parent
-MOVIES_FILE = BASE_DIR / "data" / "movies.json"
-ACTORS_FILE = BASE_DIR / "data" / "actors.json"
+MOVIES_FILE = BASE_DIR / "databases" / "movies.json"
+ACTORS_FILE = BASE_DIR / "databases" / "actors.json"
 
 def read_movies():
     with MOVIES_FILE.open("r", encoding="utf-8") as file:
@@ -106,7 +106,7 @@ def delete_movie(_, info, _id):
     raise GraphQLError(f"No movie with id '{_id}'.")
 
 def resolve_actors_in_movie(movie, info):
-    with open('{}/data/actors.json'.format("."), "r") as file:
+    with open('{}/databases/actors.json'.format("."), "r") as file:
         actors = json.load(file)
         result = [actor for actor in actors['actors'] if movie['id'] in actor['films']]
         return result

@@ -8,7 +8,7 @@ PORT = 3001
 HOST = '0.0.0.0'
 app = Flask(__name__)
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = BASE_DIR / "databases"
 
 # todo create elements for Ariadne
 type_defs = load_schema_from_path('movie.graphql')
