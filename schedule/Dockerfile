@@ -1,19 +1,13 @@
-FROM python
-# can you find a lighter image?
+FROM python:alpine
 
 WORKDIR /app
 
-# copy the requirements file in the workdir
-RUN
+# copy the required files and directories in the workdir
+COPY --parents ./schedule/./schedule.py ./schedule/./schedule.yaml ./schedule/./databases ./
+COPY ./utils/jwt.py  ./requirements.txt ./
 
 # install the Python requirements
-RUN
+RUN pip install -r requirements.txt
 
-# grpc compilation of proto files or copy of generated files
-RUN
-
-# copy the app files and directories
-RUN
-
-# start movie.py when the container is started
-CMD 
+# start schedule.py when the container is started
+CMD python ./schedule.py
