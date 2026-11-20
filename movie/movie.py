@@ -1,11 +1,14 @@
 from ariadne import graphql_sync, make_executable_schema, load_schema_from_path, ObjectType, QueryType, MutationType
 from flask import Flask, request, jsonify
+from pathlib import Path
 
 import resolvers as r
 
 PORT = 3001
 HOST = '0.0.0.0'
 app = Flask(__name__)
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
 
 # todo create elements for Ariadne
 type_defs = load_schema_from_path('movie.graphql')
@@ -13,13 +16,16 @@ query = QueryType()
 mutation = MutationType()
 movie = ObjectType('Movie')
 actor = ObjectType('Actor')
-query.set_field('movie_with_id', r.movie_with_id)
+
 query.set_field('movies', r.movies)
-#mutation.set_field('update_movie_rate', r.update_movie_rate)
-mutation.set_field('update_movie', r.update_movie)
+query.set_field('movie_with_id', r.movie_with_id)
+
 mutation.set_field('create_movie', r.create_movie)
+mutation.set_field('update_movie', r.update_movie)
 mutation.set_field('delete_movie', r.delete_movie)
+
 movie.set_field('actors', r.resolve_actors_in_movie)
+
 schema = make_executable_schema(type_defs, movie, query, mutation, actor)# root message
 @app.route("/", methods=['GET'])
 def home():

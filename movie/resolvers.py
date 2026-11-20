@@ -1,38 +1,80 @@
 import json
+import uuid
+from pathlib import Path
 from graphql import GraphQLError
 
 
-def movies(_, info):
-    with open('{}/data/movies.json'.format("."), "r") as file:
-        movies = json.load(file)
-        return movies['movies']
+BASE_DIR = Path(__file__).resolve().parent
+MOVIES_FILE = BASE_DIR / "data" / "movies.json"
+ACTORS_FILE = BASE_DIR / "data" / "actors.json"
+
+def read_movies():
+    with MOVIES_FILE.open("r", encoding="utf-8") as file:
+        return json.load(file)
 
 
-def movie_with_id(_,info,_id):
-    with open('{}/data/movies.json'.format("."), "r") as file:
-        movies = json.load(file)
-        for movie in movies['movies']:
-            if movie['id'] == _id:
-                return movie
-        raise GraphQLError(f"No movie with id '{_id}'.")
+def write_movies(data):
+    with MOVIES_FILE.open("w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False)
 
 
-# def update_movie_rate(_, info, _id, _rate):
-#     with open("./data/movies.json", "r") as rfile:
-#         movies = json.load(rfile)
-#
-#     for movie in movies["movies"]:
-#         if movie["id"] == _id:
-#             movie["rating"] = _rate
-#
-#             with open("./data/movies.json", "w") as wfile:
-#                 json.dump(movies, wfile)
-#
-#             return movie
-#
-#     raise GraphQLError(f"No movie with id '{_id}'.")
+
+def movies(_, info, _director=None, _title=None, _min_rating=None):
+    result = read_movies()["movies"]
+
+    if _director:
+        result = [
+            movie for movie in result
+            if _director.lower() in movie["director"].lower()
+        ]
+
+    if _title:
+        result = [
+            movie for movie in result
+            if _title.lower() in movie["title"].lower()
+        ]
+
+    if _min_rating is not None:
+        result = [
+            movie for movie in result
+            if float(movie["rating"]) >= float(_min_rating)
+        ]
+
+    return result
+
+def movie_with_id(_, info, _id):
+    for movie in read_movies()["movies"]:
+        if str(movie["id"]) == str(_id):
+            return movie
+
+    raise GraphQLError(f"No movie with id '{_id}'.")
+
+def create_movie(_, info, _title, _director, _rating):
+    data = read_movies()
+
+    if not _title:
+        raise GraphQLError("Missing title.")
+    if not _director:
+        raise GraphQLError("Missing director.")
+    if _rating is None:
+        raise GraphQLError("Missing rating.")
+
+    new_id = str(uuid.uuid4())
+
+    new_movie = {
+            "id": new_id,
+            "title": _title,
+            "director": _director,
+            "rating": _rating
+        }
+
+    data["movies"].append(new_movie)
+    write_movies(data)
+    return new_movie
+
 
 def update_movie(_, info, _id, _title=None, _director=None, _rating=None):
+    data = read_movies()
     updates = {}
     if _title is not None:
         updates["title"] = _title
@@ -44,18 +86,23 @@ def update_movie(_, info, _id, _title=None, _director=None, _rating=None):
     if not updates:
         raise GraphQLError("At least one movie attribute must be provided.")
 
-    with open("./data/movies.json", "r") as rfile:
-        movies = json.load(rfile)
-
-    for movie in movies["movies"]:
+    for movie in data["movies"]:
         if movie["id"] == _id:
             movie.update(updates)
-
-            with open("./data/movies.json", "w") as wfile:
-                json.dump(movies, wfile)
-
+            write_movies(data)
             return movie
 
+    raise GraphQLError(f"No movie with id '{_id}'.")
+
+
+def delete_movie(_, info, _id):
+    data = read_movies()
+
+    for movie in data["movies"]:
+        if movie["id"] == _id:
+            data["movies"].remove(movie)
+            write_movies(data)
+            return movie
     raise GraphQLError(f"No movie with id '{_id}'.")
 
 def resolve_actors_in_movie(movie, info):
@@ -63,38 +110,3 @@ def resolve_actors_in_movie(movie, info):
         actors = json.load(file)
         result = [actor for actor in actors['actors'] if movie['id'] in actor['films']]
         return result
-
-def create_movie(_, info, _id, _title, _director, _rating):
-    newmovies = {}
-    newmovie = {}
-    with open('{}/data/movies.json'.format("."), "r") as rfile:
-        movies = json.load(rfile)
-        for id in movies['movies']:
-            if id['id'] == _id:
-                raise GraphQLError(f"The movie with id '{_id}' already exists.")
-        newmovie = {
-            "id": _id,
-            "title": _title,
-            "director": _director,
-            "rating": _rating
-        }
-        movies['movies'].append(newmovie)
-        newmovies = movies
-    with open('{}/data/movies.json'.format("."), "w") as wfile:
-        json.dump(newmovies, wfile)
-    return newmovie
-
-def delete_movie(_, info, _id):
-    with open("./data/movies.json", "r") as rfile:
-        movies = json.load(rfile)
-
-    for movie in movies["movies"]:
-        if movie["id"] == _id:
-            movies["movies"].remove(movie)
-
-            with open("./data/movies.json", "w") as wfile:
-                json.dump(movies, wfile)
-
-            return movie
-
-    raise GraphQLError(f"No movie with id '{_id}'.")
