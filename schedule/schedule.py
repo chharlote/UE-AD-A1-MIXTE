@@ -5,6 +5,9 @@ import requests
 from werkzeug.exceptions import NotFound
 from jwt import token_required
 from flask_swagger_ui import get_swaggerui_blueprint
+from gql import gql, Client
+from gql.transport.requests import RequestsHTTPTransport
+from gql.transport.exceptions import TransportQueryError, TransportServerError
 
 app = Flask(__name__)
 
@@ -14,6 +17,8 @@ HOST = '0.0.0.0'
 
 SWAGGER_URL = "/docs"
 API_URL = "/openapi.yaml"
+MOVIE_GRAPHQL_URL ="http://movie:3001/graphql"
+
 
 swaggerui_blueprint = get_swaggerui_blueprint(
     SWAGGER_URL,
@@ -35,27 +40,47 @@ def write(times):
     with open('{}/databases/times.json'.format("."), 'w') as f:
         json.dump({"schedule": times}, f)
 
-
 def verify_movie(movie_id: str) -> tuple[bool, int, str]:
+    authorization = request.headers.get("Authorization")
+    headers = {"Content-Type": "application/json"}
+    if authorization:
+        headers["Authorization"] = authorization
+
+    transport = RequestsHTTPTransport(
+        url=MOVIE_GRAPHQL_URL,
+        headers=headers,
+        use_json=True,
+        timeout=10,
+    )
+    client = Client(transport=transport)
+
+    query = gql("""
+        query GetMovieById($id: String!) {
+            movie_with_id(_id: $id) {
+                id
+            }
+        }
+    """)
+
     try:
-        authorization = request.headers.get("Authorization")
+        result = client.execute(query, variable_values={"id": str(movie_id)})
+        movie = result.get("movie_with_id")
 
-        response = requests.get(
-            "http://localhost:3200/movies/" + str(movie_id),
-            headers={"Authorization": authorization} if authorization else {}
-        )
-
-        if response.status_code == 200:
+        if movie is not None and movie.get("id"):
             return True, 200, ""
 
-        if response.status_code == 401:
-            return False, 401, "Invalid or missing Authorization token"
+        return False, 404, "Movie not found"
 
-        return False, response.status_code, "Movie service returned an error"
+    except TransportServerError as e:
+        if e.code == 401:
+            return False, 401, "Invalid or missing Authorization token"
+        return False, e.code or 502, f"Movie service returned an error: {str(e)}"
+
+    except TransportQueryError as e:
+        return False, 400, f"GraphQL query error: {str(e)}"
 
     except requests.exceptions.RequestException as e:
         return False, 503, f"Movie service unavailable: {str(e)}"
-
 @app.route("/", methods=['GET'])
 def home():
    return "<h1 style='color:blue'>Welcome to the Showtime service!</h1>"
