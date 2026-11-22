@@ -8,37 +8,35 @@ from flask_swagger_ui import get_swaggerui_blueprint
 from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
 from gql.transport.exceptions import TransportQueryError, TransportServerError
+from pymongo import MongoClient, ReturnDocument
 
 app = Flask(__name__)
 
 PORT = 3202
 HOST = '0.0.0.0'
-
-
-SWAGGER_URL = "/docs"
-API_URL = "/openapi.yaml"
 MOVIE_GRAPHQL_URL ="http://movie:3001/graphql"
 
+# SWAGGER
+SWAGGER_URL = "/docs"
+API_URL = "/openapi.yaml"
 
 swaggerui_blueprint = get_swaggerui_blueprint(
     SWAGGER_URL,
     API_URL,
     config={"app_name": "Schedule Service API"}
 )
-
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
-try:
+# MONGODB
+client = MongoClient("mongodb://root:example@mongo:27017/")
+db = client["schedule"]
+schedule_collection = db["schedule"]
 
-    with open('{}/databases/times.json'.format("."), "r") as jsf:
-        times = json.load(jsf)["schedule"]
-except FileNotFoundError:
-    print("Error: times.py file not found.")
-    sys.exit(1)
+if schedule_collection.count_documents({}) == 0:
+    with open('./databases/times.json', "r") as jsf:
+        schedule_data = json.load(jsf)["schedule"]
+        schedule_collection.insert_many(schedule_data)
 
-def write(times):
-    with open('{}/databases/times.json'.format("."), 'w') as f:
-        json.dump({"schedule": times}, f)
 
 def verify_movie(movie_id: str) -> tuple[bool, int, str]:
     authorization = request.headers.get("Authorization")
@@ -90,27 +88,24 @@ def openapi_spec():
     return send_from_directory(".", "schedule.yaml", mimetype="application/yaml")
 
 
-@app.route("/json", methods=['GET'])
+
+@app.route("/times", methods=['GET'])
 @token_required()
 def get_schedule():
-    res = make_response(jsonify(times), 200)
-    return res
+    schedules = list(schedule_collection.find({}, {"_id": 0}))
+    return make_response(jsonify(schedules), 200)
 
 @app.route("/timesbydate", methods=['GET'])
 @token_required()
 def get_time_bydate():
-    json = ""
-    if request.args:
-        req = request.args
-        for time in times:
-            if str(time["date"]) == str(req["date"]):
-                json = time
+    req = request.args
+    if not req or "date" not in req:
+        return make_response(jsonify({"error": "Missing date parameter"}), 400)
 
-    if not json:
-        return make_response(jsonify({"error": "No movies for this date"}), 404)
-    else:
-        res = make_response(jsonify(json),200)
-    return res
+    schedule = schedule_collection.find_one({"date": req["date"]}, {"_id": 0})
+    if not schedule:
+        return make_response(jsonify({"error": "No schedule found for this date"}), 404)
+    return make_response(jsonify(schedule), 200)
 
 @app.route("/times/", methods=['POST'])
 @token_required(admin_req=True)
@@ -134,18 +129,21 @@ def add_schedule():
     if missing_movies:
         return make_response(jsonify({"error": "The following movies are not found", "movies": missing_movies}), 404)
 
-    for schedule in times:
-        if schedule["date"] == new_date:
-            return make_response(jsonify({"error": "This date already exists"}), 409)
-
+    if schedule_collection.find_one({"date": new_date}):
+        return make_response(jsonify({"error": "This date already exists"}), 409)
 
     new_schedule = {
         "date": new_date,
         "movies": new_movies
     }
-    times.append(new_schedule)
-    write(times)
-    return make_response(jsonify({"message": "Schedule added", "schedule": new_schedule}), 201)
+    schedule_collection.insert_one(new_schedule)
+    return make_response(
+        jsonify({
+            "message": "Schedule added",
+            "schedule": {"date": new_date, "movies": new_movies}
+        }),
+        201
+    )
 
 @app.route('/times/<date>/movies', methods=['POST'])
 @token_required(admin_req=True)
@@ -155,11 +153,7 @@ def add_movie_to_schedule(date):
         return make_response(jsonify({"error": "No movies provided"}), 400)
 
     new_movies = data['movies']
-    target_schedule = None
-    for t in times:
-        if t["date"] == date:
-            target_schedule = t
-            break
+    target_schedule = schedule_collection.find_one({"date": str(date)}, {"_id": 0})
     if not target_schedule:
         return make_response(jsonify({"error": "Date not found"}), 404)
 
@@ -185,13 +179,17 @@ def add_movie_to_schedule(date):
             409
         )
 
-    target_schedule["movies"].extend(new_movies)
-    write(times)
+    updated_schedule = schedule_collection.find_one_and_update(
+        {"date": str(date)},
+        {"$push": {"movies": {"$each": new_movies}}},
+        projection={"_id": 0},
+        return_document=ReturnDocument.AFTER
+    )
 
     return make_response(
         jsonify({
-            "message": "Films ajoutés avec succès",
-            "schedule": target_schedule
+            "message": "Movies added successfully",
+            "schedule": updated_schedule
         }),
         200
     )
@@ -199,17 +197,9 @@ def add_movie_to_schedule(date):
 @app.route('/times/<date>/<movie_id>', methods=['DELETE'])
 @token_required(admin_req=True)
 def delete_movie_from_schedule(date, movie_id):
-    target_schedule = None
-
-    for t in times:
-        if t["date"] == date:
-            target_schedule = t
-            break
+    target_schedule = schedule_collection.find_one({"date": str(date)}, {"_id": 0})
     if not target_schedule:
-        return make_response(
-            jsonify({"error": "Date not found"}),
-            404
-        )
+        return make_response(jsonify({"error": "Date not found"}), 404)
 
     if movie_id not in target_schedule["movies"]:
         return make_response(
@@ -219,32 +209,36 @@ def delete_movie_from_schedule(date, movie_id):
             }),
             404
         )
-    target_schedule["movies"].remove(movie_id)
-    write(times)
+    updated_schedule = schedule_collection.find_one_and_update(
+        {"date": str(date)},
+        {"$pull": {"movies": movie_id}},
+        projection={"_id": 0},
+        return_document=ReturnDocument.AFTER
+    )
 
     return make_response(
         jsonify({
             "message": "Movie deleted successfully",
             "movie_id_deleted": movie_id,
-            "new_schedule": target_schedule
+            "new_schedule": updated_schedule
         }),
         200
     )
+
 @app.route('/times/<date>', methods=['DELETE'])
 @token_required(admin_req=True)
 def delete_schedule(date):
-    for t in times:
-        if t["date"] == date:
-            times.remove(t)
-            write(times)
-            return make_response(
-                jsonify({
-                    "message": "Schedule deleted successfully",
-                    "date": date,
-                }),
-                200
-            )
-    return make_response(jsonify({"error": "Schedule not found"}), 404)
+    result = schedule_collection.delete_one({"date": str(date)})
+    if result.deleted_count == 0:
+        return make_response(jsonify({"error": "Schedule not found"}), 404)
+
+    return make_response(
+        jsonify({
+            "message": "Schedule deleted successfully",
+            "date": date,
+        }),
+        200
+    )
 
 
 

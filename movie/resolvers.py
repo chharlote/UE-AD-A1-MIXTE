@@ -25,18 +25,6 @@ if actors_collection.count_documents({}) == 0:
         actors_collection.insert_many(actors_data)
 
 
-
-
-def read_movies():
-    with MOVIES_FILE.open("r", encoding="utf-8") as file:
-        return json.load(file)
-
-
-def write_movies(data):
-    with MOVIES_FILE.open("w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False)
-
-
 def movies(_, info, _id=None, _title=None, _director=None, _min_rate=None):
     query = {}
 

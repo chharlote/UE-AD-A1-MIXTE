@@ -20,6 +20,8 @@ services:
       dockerfile: ./schedule/Dockerfile
     ports:
       - "3202:3202"
+    depends_on:
+      - mongo
   user:
     build:
       context: .
