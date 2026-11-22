@@ -22,3 +22,5 @@ flask-swagger-ui==5.35.0
 requests==2.34.2
 graphql-core==3.2.6
 gql[requests]==3.5.3
+flask-swagger-ui==5.35.0
+pymongo==4.20.1
