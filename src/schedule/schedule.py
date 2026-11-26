@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, jsonify, make_response, send_from_directory
 import json
 import requests
-from jwt import token_required
+from ..utils.jwt import token_required
+from ..utils import sigterm  # handle sigterm signal
 from flask_swagger_ui import get_swaggerui_blueprint
 from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
@@ -12,7 +13,7 @@ app = Flask(__name__)
 
 PORT = 3202
 HOST = '0.0.0.0'
-MOVIE_GRAPHQL_URL ="http://movie:3001/graphql"
+MOVIE_GRAPHQL_URL = "http://movie:3001/graphql"
 
 # SWAGGER
 SWAGGER_URL = "/docs"
@@ -31,7 +32,7 @@ db = client["schedule"]
 schedule_collection = db["schedule"]
 
 if schedule_collection.count_documents({}) == 0:
-    with open('./databases/times.json', "r") as jsf:
+    with open('src/schedule/databases/times.json', "r") as jsf:
         schedule_data = json.load(jsf)["schedule"]
         schedule_collection.insert_many(schedule_data)
 
@@ -77,9 +78,12 @@ def verify_movie(movie_id: str) -> tuple[bool, int, str]:
 
     except requests.exceptions.RequestException as e:
         return False, 503, f"Movie service unavailable: {str(e)}"
+
+
 @app.route("/", methods=['GET'])
 def home():
-   return "<h1 style='color:blue'>Welcome to the Showtime service!</h1>"
+    return "<h1 style='color:blue'>Welcome to the Showtime service!</h1>"
+
 
 @app.route("/openapi.yaml", methods=["GET"])
 def openapi_spec():
@@ -92,6 +96,7 @@ def get_schedule():
     schedules = list(schedule_collection.find({}, {"_id": 0}))
     return make_response(jsonify(schedules), 200)
 
+
 @app.route("/timesbydate", methods=['GET'])
 @token_required()
 def get_time_bydate():
@@ -103,6 +108,7 @@ def get_time_bydate():
     if not schedule:
         return make_response(jsonify({"error": "No schedule found for this date"}), 404)
     return make_response(jsonify(schedule), 200)
+
 
 @app.route("/times/", methods=['POST'])
 @token_required(admin_req=True)
@@ -142,6 +148,7 @@ def add_schedule():
         201
     )
 
+
 @app.route('/times/<date>/movies', methods=['POST'])
 @token_required(admin_req=True)
 def add_movie_to_schedule(date):
@@ -161,7 +168,6 @@ def add_movie_to_schedule(date):
             missing_movies.append(movie_id)
     if missing_movies:
         return make_response(jsonify({"error": "The following movies are not found", "movies": missing_movies}), 404)
-
 
     already_existing_movies = []
     for movie_id in new_movies:
@@ -190,6 +196,7 @@ def add_movie_to_schedule(date):
         }),
         200
     )
+
 
 @app.route('/times/<date>/<movie_id>', methods=['DELETE'])
 @token_required(admin_req=True)
@@ -222,6 +229,7 @@ def delete_movie_from_schedule(date, movie_id):
         200
     )
 
+
 @app.route('/times/<date>', methods=['DELETE'])
 @token_required(admin_req=True)
 def delete_schedule(date):
@@ -239,5 +247,5 @@ def delete_schedule(date):
 
 
 if __name__ == "__main__":
-   print("Server running in port %s"%(PORT))
-   app.run(host=HOST, port=PORT)
+    print("Server running in port %s" % (PORT))
+    app.run(host=HOST, port=PORT)

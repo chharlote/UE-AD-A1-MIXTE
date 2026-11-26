@@ -1,36 +1,31 @@
 services:
   movie:
     build:
-      context: .
-      dockerfile: ./movie/Dockerfile
+      dockerfile: Dockerfile.movie
     ports:
       - "3001:3001"
     depends_on:
       - mongo
-
   booking:
     build:
-      context: .
-      dockerfile: ./booking/Dockerfile
+      dockerfile: Dockerfile.booking
     ports:
       - "3201:3201"
   schedule:
     build:
-      context: .
-      dockerfile: ./schedule/Dockerfile
+      dockerfile: Dockerfile.schedule
     ports:
       - "3202:3202"
     depends_on:
       - mongo
   user:
     build:
-      context: .
-      dockerfile: ./user/Dockerfile
+      dockerfile: Dockerfile.user
     ports:
       - "3203:3203"
 
   mongo:
-      image: mongo:latest
+      image: docker.io/mongo:latest
       container_name: mongo
       restart: always
       ports:
@@ -42,7 +37,7 @@ services:
         - mongo_data:/data/db
 
   mongo-express:
-    image: mongo-express:latest
+    image: docker.io/mongo-express:latest
     container_name: mongo-express
     restart: always
     ports:
@@ -54,7 +49,6 @@ services:
       ME_CONFIG_BASICAUTH: "false"
     depends_on:
       - mongo
-
 
 volumes:
   mongo_data:

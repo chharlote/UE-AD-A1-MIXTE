@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from graphql import GraphQLError
 from pymongo import MongoClient, ReturnDocument
-from jwt import token_required
+from ..utils.jwt import token_required
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -16,14 +16,15 @@ movies_collection = db["movies"]
 actors_collection = db["actors"]
 
 if movies_collection.count_documents({}) == 0:
-    with open('./databases/movies.json', "r") as jsf:
+    with open(MOVIES_FILE, "r") as jsf:
         movies_data = json.load(jsf)["movies"]
         movies_collection.insert_many(movies_data)
 
 if actors_collection.count_documents({}) == 0:
-    with open('./databases/actors.json', "r") as jsf:
+    with open(ACTORS_FILE, "r") as jsf:
         actors_data = json.load(jsf)["actors"]
         actors_collection.insert_many(actors_data)
+
 
 @token_required()
 def movies(_, info, _id=None, _title=None, _director=None, _min_rating=None):
@@ -44,12 +45,14 @@ def movies(_, info, _id=None, _title=None, _director=None, _min_rating=None):
 
     return list(movies_collection.find(query, {"_id": 0}))
 
+
 @token_required()
 def movie_with_id(_, info, _id):
     movie = movies_collection.find_one({"id": str(_id)}, {"_id": 0})
     if movie is None:
         raise Exception("Movie ID not found")
     return movie
+
 
 @token_required(admin_req=True)
 def create_movie(_, info, _title, _director, _rating):
@@ -66,14 +69,15 @@ def create_movie(_, info, _title, _director, _rating):
     new_id = str(uuid.uuid4())
 
     new_movie = {
-            "id": new_id,
-            "title": _title,
-            "director": _director,
-            "rating": _rating
-        }
+        "id": new_id,
+        "title": _title,
+        "director": _director,
+        "rating": _rating
+    }
     movies_collection.insert_one(new_movie.copy())
 
     return new_movie
+
 
 @token_required(admin_req=True)
 def update_movie(_, info, _id, _title=None, _director=None, _rating=None):
@@ -100,6 +104,7 @@ def update_movie(_, info, _id, _title=None, _director=None, _rating=None):
 
     return updated_movie
 
+
 @token_required(admin_req=True)
 def delete_movie(_, info, _id):
     movie = movies_collection.find_one({"id": str(_id)}, {"_id": 0})
@@ -111,7 +116,7 @@ def delete_movie(_, info, _id):
 
 
 def resolve_actors_in_movie(movie, info):
-    with open('{}/databases/actors.json'.format("."), "r") as file:
+    with open(ACTORS_FILE.format("."), "r") as file:
         actors = json.load(file)
         result = [actor for actor in actors['actors'] if movie['id'] in actor['films']]
         return result
