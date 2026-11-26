@@ -9,8 +9,8 @@ from ..utils.jwt import token_required
 BASE_DIR = Path(__file__).resolve().parent
 BOOKINGS_FILE = BASE_DIR / "databases" / "bookings.json"
 
-MOVIE_SERVICE_URL = "http://127.0.0.1:3001/graphql"
-SCHEDULE_SERVICE_URL = "http://127.0.0.1:3202"
+MOVIE_SERVICE_URL = "http://movie:3001/graphql"
+SCHEDULE_SERVICE_URL = "http://schedule:3202"
 
 client = MongoClient("mongodb://root:example@mongo:27017/")
 db = client["bookings"]
@@ -47,9 +47,14 @@ def verify_movie(movie_id: str, auth_header: str | None) -> None:
         raise GraphQLError(f"Movie service unavailable: {str(e)}")
 
 
-def verify_schedule(date: str, movie_id: str) -> None:
+def verify_schedule(date: str, movie_id: str, auth_header: str | None) -> None:
+    headers = {"Authorization": auth_header} if auth_header else {}
     try:
-        res = requests.get(f"{SCHEDULE_SERVICE_URL}/timesbydate", params={"date": date})
+        res = requests.get(
+            f"{SCHEDULE_SERVICE_URL}/timesbydate",
+            params={"date": date},
+            headers=headers,
+        )
         if res.status_code != 200:
             raise GraphQLError("No schedule found for this date")
         schedule = res.json()
@@ -84,7 +89,7 @@ def add_booking(_, info, _movie_id, _date):
     auth_header = info.context.headers.get("Authorization") if info.context else None
 
     verify_movie(movie_id, auth_header)
-    verify_schedule(date, movie_id)
+    verify_schedule(date, movie_id, auth_header)
 
     user_b = bookings_collection.find_one({"userid": g.user_id})
     if user_b:
