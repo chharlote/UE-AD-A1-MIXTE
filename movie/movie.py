@@ -6,6 +6,7 @@ import resolvers as r
 
 PORT = 3001
 HOST = '0.0.0.0'
+
 app = Flask(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "databases"

@@ -2,62 +2,66 @@ import json
 import uuid
 from pathlib import Path
 from graphql import GraphQLError
+from pymongo import MongoClient, ReturnDocument
+from jwt import token_required
 
 
 BASE_DIR = Path(__file__).resolve().parent
 MOVIES_FILE = BASE_DIR / "databases" / "movies.json"
 ACTORS_FILE = BASE_DIR / "databases" / "actors.json"
 
-def read_movies():
-    with MOVIES_FILE.open("r", encoding="utf-8") as file:
-        return json.load(file)
+client = MongoClient("mongodb://root:example@mongo:27017/")
+db = client["movies"]
+movies_collection = db["movies"]
+actors_collection = db["actors"]
 
+if movies_collection.count_documents({}) == 0:
+    with open('./databases/movies.json', "r") as jsf:
+        movies_data = json.load(jsf)["movies"]
+        movies_collection.insert_many(movies_data)
 
-def write_movies(data):
-    with MOVIES_FILE.open("w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False)
+if actors_collection.count_documents({}) == 0:
+    with open('./databases/actors.json', "r") as jsf:
+        actors_data = json.load(jsf)["actors"]
+        actors_collection.insert_many(actors_data)
 
+@token_required()
+def movies(_, info, _id=None, _title=None, _director=None, _min_rate=None):
+    query = {}
 
+    if _id is not None:
+        query["id"] = str(_id)
 
-def movies(_, info, _director=None, _title=None, _min_rating=None):
-    result = read_movies()["movies"]
+    if _title is not None:
+        # Recherche insensible à la casse (optionnel, sinon mets juste str(_title))
+        query["title"] = {"$regex": str(_title), "$options": "i"}
 
-    if _director:
-        result = [
-            movie for movie in result
-            if _director.lower() in movie["director"].lower()
-        ]
+    if _director is not None:
+        query["director"] = str(_director)
 
-    if _title:
-        result = [
-            movie for movie in result
-            if _title.lower() in movie["title"].lower()
-        ]
+    if _min_rate is not None:
+        query["rating"] = {"$gt": float(_min_rate)}
 
-    if _min_rating is not None:
-        result = [
-            movie for movie in result
-            if float(movie["rating"]) >= float(_min_rating)
-        ]
+    return list(movies_collection.find(query, {"_id": 0}))
 
-    return result
-
+@token_required()
 def movie_with_id(_, info, _id):
-    for movie in read_movies()["movies"]:
-        if str(movie["id"]) == str(_id):
-            return movie
+    movie = movies_collection.find_one({"id": str(_id)}, {"_id": 0})
+    if movie is None:
+        raise Exception("Movie ID not found")
+    return movie
 
-    raise GraphQLError(f"No movie with id '{_id}'.")
-
+@token_required(admin_req=True)
 def create_movie(_, info, _title, _director, _rating):
-    data = read_movies()
 
     if not _title:
-        raise GraphQLError("Missing title.")
+        raise Exception("Missing title.")
     if not _director:
-        raise GraphQLError("Missing director.")
+        raise Exception("Missing director.")
     if _rating is None:
-        raise GraphQLError("Missing rating.")
+        raise Exception("Missing rating.")
+    if not isinstance(_rating, (int, float)) or not (0 <= _rating <= 10):
+        raise Exception("Rating must be a number between 0 and 10.")
 
     new_id = str(uuid.uuid4())
 
@@ -67,43 +71,44 @@ def create_movie(_, info, _title, _director, _rating):
             "director": _director,
             "rating": _rating
         }
+    movies_collection.insert_one(new_movie.copy())
 
-    data["movies"].append(new_movie)
-    write_movies(data)
     return new_movie
 
-
+@token_required(admin_req=True)
 def update_movie(_, info, _id, _title=None, _director=None, _rating=None):
-    data = read_movies()
     updates = {}
     if _title is not None:
-        updates["title"] = _title
+        updates["title"] = str(_title)
     if _director is not None:
-        updates["director"] = _director
+        updates["director"] = str(_director)
     if _rating is not None:
-        updates["rating"] = _rating
+        updates["rating"] = float(_rating)
 
     if not updates:
         raise GraphQLError("At least one movie attribute must be provided.")
 
-    for movie in data["movies"]:
-        if movie["id"] == _id:
-            movie.update(updates)
-            write_movies(data)
-            return movie
+    updated_movie = movies_collection.find_one_and_update(
+        {"id": str(_id)},
+        {"$set": updates},
+        projection={"_id": 0},
+        return_document=ReturnDocument.AFTER
+    )
 
-    raise GraphQLError(f"No movie with id '{_id}'.")
+    if updated_movie is None:
+        raise Exception(f"No movie with id '{_id}'.")
 
+    return updated_movie
 
+@token_required(admin_req=True)
 def delete_movie(_, info, _id):
-    data = read_movies()
+    movie = movies_collection.find_one({"id": str(_id)}, {"_id": 0})
+    if movie:
+        movies_collection.delete_one({"id": str(_id)})
+    else:
+        raise Exception(f"No movie with id '{_id}'.")
+    return movie
 
-    for movie in data["movies"]:
-        if movie["id"] == _id:
-            data["movies"].remove(movie)
-            write_movies(data)
-            return movie
-    raise GraphQLError(f"No movie with id '{_id}'.")
 
 def resolve_actors_in_movie(movie, info):
     with open('{}/databases/actors.json'.format("."), "r") as file:
