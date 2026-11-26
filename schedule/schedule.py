@@ -86,7 +86,6 @@ def openapi_spec():
     return send_from_directory(".", "schedule.yaml", mimetype="application/yaml")
 
 
-
 @app.route("/times", methods=['GET'])
 @token_required()
 def get_schedule():
