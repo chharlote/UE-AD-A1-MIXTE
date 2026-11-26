@@ -1,12 +1,25 @@
-from flask import Flask, render_template, request, jsonify, make_response, g
+from flask import Flask, render_template, request, jsonify, make_response, g, send_from_directory
 import json
-from werkzeug.exceptions import NotFound
 from ..utils.jwt import token_required, create_jwt
 from ..utils import sigterm  # handle sigterm signal
+from flask_swagger_ui import get_swaggerui_blueprint
+
 app = Flask(__name__)
 
 PORT = 3203
 HOST = '0.0.0.0'
+
+SWAGGER_URL = "/docs"
+API_URL = "/openapi.yaml"
+
+swaggerui_blueprint = get_swaggerui_blueprint(
+    SWAGGER_URL,
+    API_URL,
+    config={"app_name": "User Service API"}
+)
+
+app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
+
 
 with open('src/user/databases/users.json'.format("."), "r") as jsf:
     users: list = json.load(jsf)["users"]
@@ -15,6 +28,10 @@ with open('src/user/databases/users.json'.format("."), "r") as jsf:
 @app.route("/", methods=['GET'])
 def home():
     return "<h1 style='color:blue'>Welcome to the User service!</h1>"
+
+@app.route("/openapi.yaml", methods=["GET"])
+def openapi_spec():
+    return send_from_directory(".", "user.yaml", mimetype="application/yaml")
 
 
 def save():
