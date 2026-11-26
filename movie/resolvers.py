@@ -3,7 +3,8 @@ import uuid
 from pathlib import Path
 from graphql import GraphQLError
 from pymongo import MongoClient, ReturnDocument
-from bson.json_util import dumps
+from jwt import token_required
+
 
 BASE_DIR = Path(__file__).resolve().parent
 MOVIES_FILE = BASE_DIR / "databases" / "movies.json"
@@ -24,7 +25,7 @@ if actors_collection.count_documents({}) == 0:
         actors_data = json.load(jsf)["actors"]
         actors_collection.insert_many(actors_data)
 
-
+@token_required()
 def movies(_, info, _id=None, _title=None, _director=None, _min_rate=None):
     query = {}
 
@@ -43,12 +44,14 @@ def movies(_, info, _id=None, _title=None, _director=None, _min_rate=None):
 
     return list(movies_collection.find(query, {"_id": 0}))
 
+@token_required()
 def movie_with_id(_, info, _id):
     movie = movies_collection.find_one({"id": str(_id)}, {"_id": 0})
     if movie is None:
         raise Exception("Movie ID not found")
     return movie
 
+@token_required(admin_req=True)
 def create_movie(_, info, _title, _director, _rating):
 
     if not _title:
@@ -72,7 +75,7 @@ def create_movie(_, info, _title, _director, _rating):
 
     return new_movie
 
-
+@token_required(admin_req=True)
 def update_movie(_, info, _id, _title=None, _director=None, _rating=None):
     updates = {}
     if _title is not None:
@@ -97,6 +100,7 @@ def update_movie(_, info, _id, _title=None, _director=None, _rating=None):
 
     return updated_movie
 
+@token_required(admin_req=True)
 def delete_movie(_, info, _id):
     movie = movies_collection.find_one({"id": str(_id)}, {"_id": 0})
     if movie:

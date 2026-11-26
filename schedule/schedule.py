@@ -1,8 +1,6 @@
 from flask import Flask, render_template, request, jsonify, make_response, send_from_directory
 import json
-import sys
 import requests
-from werkzeug.exceptions import NotFound
 from jwt import token_required
 from flask_swagger_ui import get_swaggerui_blueprint
 from gql import gql, Client
