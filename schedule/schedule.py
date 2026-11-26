@@ -238,7 +238,6 @@ def delete_schedule(date):
     )
 
 
-
 if __name__ == "__main__":
    print("Server running in port %s"%(PORT))
    app.run(host=HOST, port=PORT)
