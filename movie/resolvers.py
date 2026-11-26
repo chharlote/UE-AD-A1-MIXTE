@@ -26,7 +26,7 @@ if actors_collection.count_documents({}) == 0:
         actors_collection.insert_many(actors_data)
 
 @token_required()
-def movies(_, info, _id=None, _title=None, _director=None, _min_rate=None):
+def movies(_, info, _id=None, _title=None, _director=None, _min_rating=None):
     query = {}
 
     if _id is not None:
@@ -39,8 +39,8 @@ def movies(_, info, _id=None, _title=None, _director=None, _min_rate=None):
     if _director is not None:
         query["director"] = str(_director)
 
-    if _min_rate is not None:
-        query["rating"] = {"$gt": float(_min_rate)}
+    if _min_rating is not None:
+        query["rating"] = {"$gt": float(_min_rating)}
 
     return list(movies_collection.find(query, {"_id": 0}))
 
