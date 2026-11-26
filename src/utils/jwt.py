@@ -1,4 +1,5 @@
 from flask import request, g, jsonify, make_response
+from graphql import GraphQLError
 import json
 import base64
 import hmac
@@ -70,15 +71,15 @@ def token_required(admin_req=False):
                     token = auth_header.split(' ')[1]
 
             if not token:
-                return make_response(jsonify({"error": "Authentication Token is missing"}), 401)
+                raise GraphQLError("Authentication Token is missing")
 
             payload = verify_jwt(token)
             if not payload:
-                return make_response(jsonify({"error": "Token is invalid or expired"}), 401)
+                raise GraphQLError("Token is invalid or expired")
 
             g.admin = payload["admin"]
             if admin_req and not g.admin:
-                return make_response(jsonify({"error": "Admin rights required"}), 401)
+                raise GraphQLError("Admin rights required")
 
             g.user_id = payload["id"]
 

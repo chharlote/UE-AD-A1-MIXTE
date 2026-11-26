@@ -58,13 +58,13 @@ def movie_with_id(_, info, _id):
 def create_movie(_, info, _title, _director, _rating):
 
     if not _title:
-        raise Exception("Missing title.")
+        raise GraphQLError("Missing title.")
     if not _director:
-        raise Exception("Missing director.")
+        raise GraphQLError("Missing director.")
     if _rating is None:
-        raise Exception("Missing rating.")
+        raise GraphQLError("Missing rating.")
     if not isinstance(_rating, (int, float)) or not (0 <= _rating <= 10):
-        raise Exception("Rating must be a number between 0 and 10.")
+        raise GraphQLError("Rating must be a number between 0 and 10.")
 
     new_id = str(uuid.uuid4())
 
