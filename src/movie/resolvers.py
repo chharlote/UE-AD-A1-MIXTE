@@ -34,7 +34,6 @@ def movies(_, info, _id=None, _title=None, _director=None, _min_rating=None):
         query["id"] = str(_id)
 
     if _title is not None:
-        # Recherche insensible à la casse (optionnel, sinon mets juste str(_title))
         query["title"] = {"$regex": str(_title), "$options": "i"}
 
     if _director is not None:
